@@ -1,5 +1,8 @@
 #!/bin/bash
 
+# Copyright 2015 Ian Kronquist.
+# All rights reserved.
+
 # You said you wanted comments so...
 
 # For whatever stupid reason success is 0 (usually used for false)
