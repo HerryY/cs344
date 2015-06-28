@@ -1,0 +1,165 @@
+#!/bin/bash
+
+# You said you wanted comments so...
+
+# For whatever stupid reason success is 0 (usually used for false)
+# and failure is anything not 0 (usually used for true). This makes sense that
+# you might want many error codes, but honestly it defies intuition.
+EXIT_EPIC_FAIL=1
+EXIT_ROARING_SUCCESS=0
+
+# Print usage information to stderr. Obviously the 1>&2 wackadoo redirects
+# stdout to stderr.
+# Don't actually exit failure, leave that to the caller.
+# Use single quotes to make it clear that all of the brackets and braces won't
+# suffer  interpolation.
+usage () {
+	echo 'Usage: stats {-rows|-cols} [file]' 1>&2
+}
+
+# If a file was specified and the file is not readable or there are too many
+# arguments print usage and exit.
+# The -z flag checks whether the $2 variable is set.
+# The -r flag checks whether a file exists and is readable.
+# ! is 'not`, like you expect.
+# $# is the number of argument the script received.
+if [[ ! -z $2 && ! -r $2  || $# > 2 ]]; then
+	echo "The file $2 couldn't be read." 1>&2
+	exit $EXIT_EPIC_FAIL
+fi
+
+# The =~ operator is an ugly backwards looking regex matcher. The statement on
+# the  right is a perl extended regular expression. By the way, extended
+# regular expressions aren't actually a regular language.
+
+# If the first argument begins with -r
+if [[ $1 =~ ^-r ]]; then
+	# FIXME: The rounding for the averages is broken!
+	echo Average Median
+	# Way down at the end, ${2:-/dev/stdin} means use $2 or /dev/stdin if $2 is
+	# not defined. This is being redirected into the while loops which reads
+	# each line.
+	while read line 
+	do
+		# Create a space deliminated sorted array of each line.
+		# this cleans the line. sort expects newline delineated output, so the
+		# output needs to be translated with tr. The newlines are translated
+		# into spaces because bash expects the input of a bash array to be
+		# space deliminated (by default).
+		sorted_line=$(echo $line | expand | tr ' ' '\n' | sed '/^$/d' | sort | tr '\n' ' ')
+		# Create an array from the space deliminated line
+		line_array=($sorted_line)
+		# Use sed to transform this line so that each element is separated by
+		# pluses. This will be fed directly to expr to be calculated.
+		line_as_sum=$(echo $sorted_line | sed 's/ / + /g')
+		# Find the line length.
+		line_length=${#line_array[@]}
+		center_index=$(expr $line_length / 2)
+		#echo "line len" $line_length
+		#echo "line arr" ${line_array[@]}
+		#echo "center index" $center_index
+		# The median is the element in the middle of the array.
+		numerator_correction=$(expr \( $line_length \) / 2 )
+		median=${line_array[$center_index]}
+		# The average is the sum of the elements divided by the number of
+		# elements
+		average=$(expr \( $line_as_sum + $numerator_correction \) / $line_length)
+		#echo "Average $average"
+		#python -c "print 'py', ($line_as_sum)/$line_length"
+		#echo "median $median"
+		#python -c "l='$line'.split('\t'); mid=len(l)/2; print 'py', l[mid]"
+
+		printf "$average\t$median\n"
+	done < "${2:-/dev/stdin}"
+
+# else if the first argument begins with -c
+elif [[ $1 =~ ^-c ]]; then
+	# This whackadoo nonsense is a hacky way to read all of stin or the input
+	# file. We need to read it all in at once since we will use the first line
+	# twice. The first time we will use it to determine how many columns are in
+	# the file. The second time we will use it for actualle extracting data.
+
+	# Create a buffer to hold the contents of the file.
+	file=""
+	# Read the file or stdin (same as explained for the -r branch) line by line
+	while read line 
+	do
+		# read chomps the newline. Add it back.
+		file+=$line
+		file+=$'\n'
+	done < "${2:-/dev/stdin}"
+	# Get the first line of the file with head.
+	first_line_array=($(printf "%s\n" "$file" | head -1 "${2:-/dev/stdin}"))
+
+	# Get the length of the first line array. Use this to determine the number
+	# of columns to cut.
+	first_line_length=${#first_line_array[@]}
+
+	# Declare arrays to hold calculated data.
+	averages=()
+	means=()
+	# Catch the exceptional case when the file is empty. cut doesn't like being
+	# passed emptiness.
+	if [[ $first_line_length == 0 ]]
+	then
+		echo Averages:
+		printf "\n"
+		echo Means:
+		printf "\n"
+	fi
+
+	# Iterate over the inclusive range from 1 to the length of the first line.
+	# Use that index for cut.
+	for index in $(seq 1 $first_line_length)
+	do
+		# cut each column and sort it. Translate it into a newline delimited
+		# array for use by bash and expr.
+		data=$(printf "%s\n" "$file" | cut -f $index | sort | tr '\n' ' ')
+		# Transform the data into an array.
+		data_as_arr=($data)
+		# Find the mid point for the median.
+		mid_point=$(expr ${#data_as_arr[@]} / 2)
+		# Build a string to calculate the sum of the numbers, same as above.
+		data_as_sum=$(echo $data | sed 's/ / + /g')
+		numerator_correction=$(expr \( ${#data_as_arr[@]} \) / 2 )
+		# Calculate the average.
+		average=$(expr \( $data_as_sum + $numerator_correction \) / ${#data_as_arr[@]})
+		# Find the element at the midpoint of the array. This is the median.
+		mean=${data_as_arr[$mid_point]}
+		# Append the calculated data to the arrays
+		averages+=($average)
+		means+=($mean)
+	done
+	# Print the data the way we like it.
+	echo Averages:
+	printf "%s\t" ${averages[@]}
+	printf "\n"
+	echo Means:
+	printf "%s\t" ${means[@]}
+	printf "\n"
+# Otherwize the user screwed up and should be given a lecture about usage.
+# Exits failure.
+else
+	usage
+	exit $EXIT_EPIC_FAIL
+fi
+
+# Define a function to clean up the temporary file if the script is killed
+# Warning! This function terminates!
+cleanup() {
+	rm -f "tmp_file_$$"
+	exit 0
+}
+
+# When the signale SIGTERM, SIGINT, or SIGHUP are sent to the process,
+# run the cleanup function.
+trap cleanup TERM HUP INT
+
+
+
+# As an addendum, we're supposed to use temproray files, but I don't. It's
+# really not necessary. But here, let me write one anyway, and then remove it
+# so it doesn't clutter the world.
+# $$ is the pid of the current process.
+echo 'sillyness' > "tmp_file_$$"
+rm "tmp_file_$$"
