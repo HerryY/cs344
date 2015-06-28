@@ -27,7 +27,7 @@ fi
 # The -r flag checks whether a file exists and is readable.
 # ! is 'not`, like you expect.
 if [[ ! -z $2 && ! -r $2 ]]; then
-	echo "$0: Cannot read $2" 1>&2
+	echo "$0: cannot read $2" 1>&2
 	exit $EXIT_EPIC_FAIL
 fi
 
@@ -37,7 +37,6 @@ fi
 
 # If the first argument begins with -r
 if [[ $1 =~ ^-r ]]; then
-	# FIXME: The rounding for the averages is broken!
 	printf "Average\tMedian\n"
 	# Way down at the end, ${2:-/dev/stdin} means use $2 or /dev/stdin if $2 is
 	# not defined. This is being redirected into the while loops which reads
@@ -49,6 +48,14 @@ if [[ $1 =~ ^-r ]]; then
 		# output needs to be translated with tr. The newlines are translated
 		# into spaces because bash expects the input of a bash array to be
 		# space deliminated (by default).
+		# Step by step:
+		# 1. echo prints the line.
+		# 2. expand replaces all tabs with spaces
+		# 3. tr translates all spaces to newlines
+		# 4. sed removes empty lines
+		# 5. sort sorts numerically
+		# 6. tr translates newlines to spaces
+		# FIXME: This could be a lot more simple, but it works.
 		sorted_line=$(echo "$line" | expand | tr ' ' '\n' | sed '/^$/d' | sort -n | tr '\n' ' ')
 		# Create an array from the space deliminated line
 		line_array=($sorted_line)
@@ -92,7 +99,7 @@ elif [[ $1 =~ ^-c ]]; then
 		file+=$'\n'
 	done < "${2:-/dev/stdin}"
 	# Get the first line of the file with head.
-	first_line_array=($(printf "%s\n" "$file" | head -1 "${2:-/dev/stdin}"))
+	first_line_array=($(printf "%s\n" "$file" | head -1))
 
 	# Get the length of the first line array. Use this to determine the number
 	# of columns to cut.
@@ -105,6 +112,10 @@ elif [[ $1 =~ ^-c ]]; then
 	# passed emptiness.
 	if [[ $first_line_length == 0 ]]
 	then
+		echo Averages:
+		printf "\n"
+		echo Medians:
+		printf "\n"
 		exit $EXIT_ROARING_SUCCESS
 	fi
 
@@ -114,6 +125,11 @@ elif [[ $1 =~ ^-c ]]; then
 	do
 		# cut each column and sort it. Translate it into a newline delimited
 		# array for use by bash and expr.
+		# Step by step:
+		# 1. print each line in the file ending with a newline.
+		# 2. cut the $index'th column.
+		# 3. sort numerically.
+		# 4. translate newlines to spaces.
 		data=$(printf "%s\n" "$file" | cut -f $index | sort -n | tr '\n' ' ')
 		# Transform the data into an array.
 		data_as_arr=($data)
