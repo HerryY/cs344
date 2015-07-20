@@ -1,8 +1,8 @@
 CC=/usr/bin/clang
-CFLAGS=-g -wall -wpedantic -std=c99
+CFLAGS=-g -Wall -Wpedantic -std=c99
 
 all:
-	${CC} kronquii.adventure.c -o kronquii.adventure
+	${CC} kronquii.adventure.c -o kronquii.adventure ${CFLAGS}
 
 clean:
 	rm -f kronquii.adventure
