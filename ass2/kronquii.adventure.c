@@ -139,11 +139,12 @@ void repl() {
                                 // If we have reached the capacity of the
                                 // array of visited rooms reallocate
                                 if (visited_index >= visited_cap) {
-                                        visited_cap += NUM_ROOMS *
-                                                       sizeof(struct room*);
+                                        visited_cap += NUM_ROOMS;
                                         printf("realloced  %p\n", visited);
                                         visited = realloc(visited,
-                                                          visited_cap);
+                                                          visited_cap *
+                                                          sizeof(struct room*)
+                                                         );
 
                                         assert(visited != NULL);
                                 }
@@ -418,6 +419,7 @@ struct room deserialize_single_room(char *name) {
         } else {
                 // What the hell are you doing?
         }
+        fclose(file);
         return r;
 }
 
