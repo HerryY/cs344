@@ -1,7 +1,7 @@
 // Copyright 2015 Ian Kronquist.
 #define _GNU_SOURCE
 #include <dirent.h>
-#include <math.h>
+//#include <math.h> Requires linking with -lm
 #include <pwd.h>
 #include <assert.h>
 #include <stdbool.h>
@@ -170,9 +170,11 @@ struct room *generate_rooms() {
                 // Initialize the number of connections to 0.
                 rooms_list[i].num_conns = 0;
                 // Set the capacity to a random number between MIN_CONN and
-                // MAX_CONN
+                // MAX_CONN minus 2. If the minus 2 is not there the process
+                // of connecting the rooms will tend to make all of the rooms
+                // have the maximum number of connections.
                 unsigned int cap_conns = rand() % (MAX_CONN - MIN_CONN);
-                cap_conns += MIN_CONN;
+                cap_conns += MIN_CONN-2;
                 rooms_list[i].cap_conns = cap_conns;
 
                 // Pick a name for the room
@@ -291,7 +293,8 @@ char *get_dir_name() {
         // valgrind happy for that \0 at the end of the string.
         unsigned int buffer_max_len = strlen(".rooms.") +
                                       strlen(user_info->pw_name) +
-                                      log(pid)/log(10) + 5;
+                                      10;
+                                      //log(pid)/log(10) + 5;
         // actually allocate space for the name
         char *dir_name = malloc(buffer_max_len * sizeof(char));
         assert(dir_name != NULL);
