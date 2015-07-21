@@ -97,7 +97,6 @@ void repl() {
         struct room *current_room = &rooms_list[0];
         // Allocate an array to hold the list of visited functions
         struct room **visited = malloc(sizeof(struct room*) * NUM_ROOMS);
-        printf("malloced repl %p\n", visited);
         unsigned int visited_index = 0;
         unsigned int visited_cap = NUM_ROOMS;
         // Create a buffer for holding the name the user will type. Obviously
@@ -113,7 +112,6 @@ void repl() {
                 // If we're at the end, say so and return
                 if (current_room->type == END_ROOM) {
                         ending_message(num_steps, visited, visited_index);
-                        printf("freeing visited %p\n", visited);
                         free(visited);
                         return;
                 }
@@ -140,7 +138,6 @@ void repl() {
                                 // array of visited rooms reallocate
                                 if (visited_index >= visited_cap) {
                                         visited_cap += NUM_ROOMS;
-                                        printf("realloced  %p\n", visited);
                                         visited = realloc(visited,
                                                           visited_cap *
                                                           sizeof(struct room*)
@@ -297,7 +294,6 @@ char *get_dir_name() {
                                       log(pid)/log(10) + 5;
         // actually allocate space for the name
         char *dir_name = malloc(buffer_max_len * sizeof(char));
-        printf("malloced gdn %p\n", dir_name);
         assert(dir_name != NULL);
         // Create the name
         sprintf(dir_name, "%s.rooms.%d", user_info->pw_name, pid);
@@ -343,7 +339,6 @@ void serialize_rooms(struct room rooms[NUM_ROOMS]) {
         }
         // Return to the original directory.
         chdir("..");
-        printf("freeing sr %p\n", dir_name);
         // Freedom! Free the directory name
         free(dir_name);
 }
@@ -426,7 +421,6 @@ struct room deserialize_single_room(char *name) {
 // Recreate the rooms structure by reading the files
 struct room* deserialize_rooms() {
         struct room *rooms = malloc(NUM_ROOMS * sizeof(struct room));
-        printf("malloced dsr %p\n", rooms);
         unsigned int room_count = 0;
         char *dir_name = get_dir_name();
         // FIXME: Make sure that directory exists with stat
@@ -442,7 +436,6 @@ struct room* deserialize_rooms() {
 
         closedir (dp);
 
-        printf("freeing sr %p\n", dir_name);
         free(dir_name);
         chdir("..");
         return rooms;
@@ -452,7 +445,6 @@ struct room* deserialize_rooms() {
 void destroy_rooms(struct room *rooms) {
         // Take advantage of the fact that the rooms are allocated as a
         // contiguous array.
-        printf("freeing sr %p\n", rooms);
         free(rooms);
 }
 
