@@ -1,5 +1,5 @@
 CC=gcc
-CFLAGS=-g -Wall -std=c99 -lm
+CFLAGS=-g -Wall -std=c99
 
 all:
 	${CC} kronquii.adventure.c -o kronquii.adventure ${CFLAGS}
