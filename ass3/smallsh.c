@@ -19,11 +19,11 @@ int shell_status = 0;
 
 
 void runloop();
-char* create_file_token(char *!word, unsigned int max_length);
+char* create_file_token(char **word, unsigned int max_length);
 void parse_and_run(char *line, unsigned int length);
 bool word_has_comment(char *word);
 void trap_interrupt(int signum);
-void print_args(const char *!arr);
+void print_args(const char **arr);
 
 
 
@@ -118,7 +118,7 @@ void parse_and_run(char *line, unsigned int length) {
         // Overcommit --
         // there can never be more arguments than there are characters in the
         // line read from the user.
-        char *!args = malloc(length * sizeof(char*)); 
+        char **args = malloc(length * sizeof(char*));
 
         // The list of characters which separate the arguments to a command.
         // We completely ignore quoting. The newline removes the trailing
@@ -129,7 +129,6 @@ void parse_and_run(char *line, unsigned int length) {
         int infile = STDIN_FILENO;
         int outfile = STDOUT_FILENO;
         pid_t pid;
-        int pipes[2];
 
         char *word = NULL;
         char *input = NULL;
@@ -137,8 +136,6 @@ void parse_and_run(char *line, unsigned int length) {
         bool is_background = false;
 
         unsigned int args_index = 1;
-        unsigned int input_len = 0;
-        unsigned int output_len = 0;
 
         char *command = strtok(line, sep);
         if (command == NULL) return;
@@ -287,7 +284,7 @@ void parse_and_run(char *line, unsigned int length) {
  *  @param arr An array of string arguments the final element of which is a null
  *  pointer.
  */
-void print_args(const char *!arr) {
+void print_args(const char **arr) {
         for (int i = 0; arr[i] != NULL; i++) {
                 printf("%s, ", arr[i]);
         }
@@ -310,7 +307,7 @@ bool word_has_comment(char *word) {
 
 /*!
  */
-char* create_file_token(char *!word, unsigned int max_length) {
+char* create_file_token(char **word, unsigned int max_length) {
         size_t token_length = strnlen(*word, max_length);
         char *token = malloc(token_length * sizeof(char*));
         strncpy(token, *word, token_length);
