@@ -11,3 +11,4 @@ clean:
 	rm -rf *.dSYM
 	rm -f smallsh
 	rm -rf html
+	rm -rf testdir*
