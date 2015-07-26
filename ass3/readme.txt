@@ -3,7 +3,7 @@ Small Shell
 
 To compile:
 ```
-$ gcc smallsh.c -o smallsh
+$ gcc smallsh.c -std=c99 -o smallsh
 ```
 
 For improved diagnostics:
