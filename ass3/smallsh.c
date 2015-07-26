@@ -6,6 +6,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
 #include <sys/wait.h>
 #include <unistd.h>
 
@@ -18,11 +19,11 @@ int shell_status = 0;
 
 
 void runloop();
-char* create_file_token(char **word, unsigned int max_length);
+char* create_file_token(char *!word, unsigned int max_length);
 void parse_and_run(char *line, unsigned int length);
 bool word_has_comment(char *word);
 void trap_interrupt(int signum);
-void print_args(char **arr);
+void print_args(const char *!arr);
 
 
 
@@ -31,16 +32,23 @@ void destroy_child_list();
 void push_child_list(pid_t child);
 pid_t pop_child_list();
 
+/*! Initialize the stack of backgrounded child processes.
+*/
 void init_child_list() {
         bg_child_list.num = 0;
         bg_child_list.cap = 4;
         bg_child_list.children = malloc(bg_child_list.cap * sizeof(pid_t));
 }
 
+/*! Destroy the stack of backgrounded child processes.
+*/
 void destroy_child_list() {
         free(bg_child_list.children);
 }
 
+/*! Push the child process onto the stack of child processes.
+ @param child The pid of a child process.
+*/
 void push_child_list(pid_t child) {
         if (bg_child_list.num == bg_child_list.cap) {
                 bg_child_list.cap *= 2;
@@ -52,6 +60,8 @@ void push_child_list(pid_t child) {
         bg_child_list.num++;
 }
 
+/*! Pop a backgrounded child process off the stack.
+*/
 pid_t pop_child_list() {
         if (bg_child_list.num > 0) {
                 bg_child_list.num--;
@@ -63,41 +73,56 @@ pid_t pop_child_list() {
 
 int main() {
         init_child_list();
+        // Trap SIGINT. This is a shell, so kill children, not current process.
         signal(SIGINT, trap_interrupt);
         runloop();
         return 0;
 }
 
-void trap_interrupt(int signum) {
+/*! Trap a signal and kill all child processes.
+ @param _ The signal being sent. Discarded.
+*/
+void trap_interrupt(int _) {
+        int child_status;
         pid_t child;
         while ((child = pop_child_list())) {
                 kill(child, SIGKILL);
+                waitpid(child, &child_status, 0);
         }
 }
 
+/*! Runloop, the central part of the shell. Read a line, parse it, execute it,
+ repeat until EOF.
+*/
 void runloop() {
         char *line = NULL;
         size_t linecap = 0;
         ssize_t line_len;
+        printf(":");
+        while ((line_len = getline(&line, &linecap, stdin)) > 0) {
+                //fprintf(stderr, "%s\n",line);
+                parse_and_run(line, (unsigned int)line_len);
                 printf(":");
-        while (true) {
-                if((line_len = getline(&line, &linecap, stdin)) > 0) {
-                        //fprintf(stderr, "%s\n",line);
-                        parse_and_run(line, (unsigned int)line_len);
-                        printf(":");
-                        fflush(stdout);
-                }
+                fflush(stdout);
         }
+        destroy_child_list();
 }
 
+/*! Parse a given line and execute it.
+ @param line The line given by the user.
+ @param length The length of the given line.
+*/
 void parse_and_run(char *line, unsigned int length) {
         // command [arg1 arg2 ...] [< input_file] [> output_file] [&]
 
         // Overcommit --
         // there can never be more arguments than there are characters in the
         // line read from the user.
-        char **args = malloc(length * sizeof(char*)); 
+        char *!args = malloc(length * sizeof(char*)); 
 
+        // The list of characters which separate the arguments to a command.
+        // We completely ignore quoting. The newline removes the trailing
+        // newline from getline.
         const char *sep = " \n";
         const char devnull[] = "/dev/null";
 
@@ -182,50 +207,87 @@ void parse_and_run(char *line, unsigned int length) {
                 output = (char*)devnull;
         }
 
+        // Fork. The program splits into two branches a child and a parent.
+        // The parent has pid set to the child's pid, and the child has
+        // pid set to 0.
         pid = fork();
         if (pid == 0) { // child
+                // If the input file has been specified, set child's stdin
+                // to input.
                 if (input != NULL) {
+                        // open the input file
                         infile = open(input, O_RDONLY);
+                        // If opening the input file fails, print reason.
                         if (infile == -1) {
                                 perror("infile");
                         } else {
+                                // Redirect stdin to the input file descriptor.
                                 dup2(infile, STDIN_FILENO);
+                                // Close the file.
                                 close(infile);
                         }
                 }
                 if (output != NULL) {
+                        // Open the output file, creating it if it doesn't
+                        // exist.
                         outfile = open(output, O_WRONLY | O_CREAT);
+                        // Same as $ chmod 0644 output
+                        if (chmod(output, S_IRUSR | S_IWUSR | S_IRGRP |
+                                  S_IROTH) == -1) {
+                                perror("chmod");
+                        }
+                        // If opening the output file fails, print reason.
                         if (outfile == -1) {
                                 perror("outfile");
                         } else {
+                                // Redirect the output file descriptor to
+                                // stdout.
                                 dup2(outfile, STDOUT_FILENO);
                                 close(outfile);
                         }
                 }
 
+                // Execute the command. If execution succeeds then this program
+                // will be replaced by the exec'd one.
                 execvp(command, args);
+                // if execution fails, print the error, clean up allocated
+                // memory, and exit.
                 perror("execvp");
                 free(args);
                 free(line);
                 destroy_child_list();
+                // Exit 1 according to specs.
                 exit(1);
         } else { // parent
+                // If the child process is not backgrounded, wait for it.
                 if (!is_background) {
                         waitpid(pid, &shell_status, 0);
                 } else {
+                        // otherwise, add it to the list of backgrounded
+                        // processes to be signaled at exit.
                         push_child_list(pid);
                 }
         }
+        // If the input has been set and it's not the statically allocated
+        // /dev/null, free it
         if (input != devnull && input != NULL) {
                 free(input);
         }
+        // If the output has been set and it's not the statically allocated
+        // /dev/null, free it
         if (output != devnull && output != NULL) {
                 free(output);
         }
+        // free the list of arguments.
         free(args);
 }
 
-void print_args(char **arr) {
+/*!
+ *  Print the list of arguments. Useful for debugging.
+ *  @param arr An array of string arguments the final element of which is a null
+ *  pointer.
+ */
+void print_args(const char *!arr) {
         for (int i = 0; arr[i] != NULL; i++) {
                 printf("%s, ", arr[i]);
         }
@@ -233,6 +295,9 @@ void print_args(char **arr) {
 
 }
 
+/*!
+ * Determine whether the word has a hashtag if so, make the hashtag a \0.
+ */
 bool word_has_comment(char *word) {
         for (int i = 0; word[i] != '\0'; i++) {
                 if (word[i] == '#') {
@@ -243,7 +308,9 @@ bool word_has_comment(char *word) {
         return false;
 }
 
-char* create_file_token(char **word, unsigned int max_length) {
+/*!
+ */
+char* create_file_token(char *!word, unsigned int max_length) {
         size_t token_length = strnlen(*word, max_length);
         char *token = malloc(token_length * sizeof(char*));
         strncpy(token, *word, token_length);
