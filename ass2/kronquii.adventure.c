@@ -291,6 +291,12 @@ char *get_dir_name() {
         // https://en.wikipedia.org/wiki/Logarithm#Change_of_base
         // Add a pinch to grow an inch -- err rather an extra 1 to make
         // valgrind happy for that \0 at the end of the string.
+        // Note -- we don't actually do this because that would require
+        // linking against the math library. Instead I inspected the maximum
+        // number of processes on the os-class server with
+        // $ cat /proc/sys/kernel/pid_max
+        // I then decided to double the number of characters in there because
+        // if we're adding arbitrary constants they might as well be round.
         unsigned int buffer_max_len = strlen(".rooms.") +
                                       strlen(user_info->pw_name) +
                                       10;
