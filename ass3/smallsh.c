@@ -6,6 +6,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/wait.h>
 #include <unistd.h>
 
 struct child_list {
@@ -120,6 +121,9 @@ void parse_and_run(char *line, unsigned int length) {
 
         if (strcmp(command, "exit") == 0) {
                 trap_interrupt(-1);
+                destroy_child_list();
+                free(args);
+                free(line);
                 exit(1);
         } else if (strcmp(command, "cd") == 0) {
                 char *dest = strtok(NULL, sep);
@@ -182,23 +186,28 @@ void parse_and_run(char *line, unsigned int length) {
         if (pid == 0) { // child
                 if (input != NULL) {
                         infile = open(input, O_RDONLY);
-                        if (infile != -1) {
+                        if (infile == -1) {
                                 perror("infile");
+                        } else {
+                                dup2(infile, STDIN_FILENO);
+                                close(infile);
                         }
-                        dup2(infile, STDIN_FILENO);
-                        close(infile);
                 }
                 if (output != NULL) {
                         outfile = open(output, O_WRONLY | O_CREAT);
-                        if (outfile != -1) {
-                                perror("infile");
+                        if (outfile == -1) {
+                                perror("outfile");
+                        } else {
+                                dup2(outfile, STDOUT_FILENO);
+                                close(outfile);
                         }
-                        dup2(outfile, STDOUT_FILENO);
-                        close(outfile);
                 }
 
                 execvp(command, args);
-                perror("command not found");
+                perror("execvp");
+                free(args);
+                free(line);
+                destroy_child_list();
                 exit(1);
         } else { // parent
                 if (!is_background) {
