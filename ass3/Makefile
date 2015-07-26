@@ -8,6 +8,6 @@ docs:
 	doxygen smallsh.c
 
 clean:
-	rm -rf .dSYM
+	rm -rf *.dSYM
 	rm -f smallsh
 	rm -rf html
