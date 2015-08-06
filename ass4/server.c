@@ -19,20 +19,21 @@
 
 void setup(int portno);
 void do_otp(size_t message_len, char *key_buffer, char*message_buffer);
-void cleanup(int serversockfd, int clientsockfd);
 void serve_loop(int socketfd);
+void cleanup(int serversockfd, int clientsockfd, char *key_buffer,
+             char *message_buffer);
 
 
-int main (int argc, char * argv[]) {
+int main (int argc, char *argv[]) {
     int portno;
-    if (argc < 2) {
+    if (argc != 2) {
         fprintf(stderr, "No port provided!\n");
         exit(EXIT_FAILURE);
     }
     portno = (int)strtol(argv[1], NULL, 10);
 }
 
-void setup(portno) {
+void setup(int portno) {
     int socketfd, err;
     struct sockaddr_in serv_addr;
 
@@ -68,11 +69,11 @@ void setup(portno) {
 
 void serve_loop(int socketfd) {
     int newsockfd, err;
+    struct sockaddr_in cli_addr;
     socklen_t clilen = sizeof(cli_addr);
     char client_type = '\0';
     char *message_buffer, *key_buffer;
     size_t message_len;
-    struct sockaddr_in cli_addr;
 
     while (true) {
         // Accept new connections from the client and fork off workers.
@@ -96,7 +97,7 @@ void serve_loop(int socketfd) {
             if (client_type != SERVERTYPE) {
                 fprintf(stderr, "Rejecting connection from the wrong "
                         "type of client\n");
-                cleanup(socketfd, newsockfd);
+                cleanup(socketfd, newsockfd, NULL, NULL);
                 exit(EXIT_FAILURE);
             }
 
@@ -110,7 +111,7 @@ void serve_loop(int socketfd) {
             }
 
             // Allocate space for the message and the key. They will be the
-            //same size.
+            // same size.
             message_buffer = malloc(message_len);
             key_buffer = malloc(message_len);
 
@@ -160,13 +161,14 @@ void do_otp(size_t message_len, char *key_buffer, char*message_buffer) {
 // Also free any buffers which are not NULL.
 void cleanup(int serversockfd, int clientsockfd, char *key_buffer,
              char *message_buffer) {
+    int err;
     if (message_buffer != NULL) {
         free(message_buffer);
     }
     if (key_buffer != NULL) {
         free(key_buffer);
     }
-    int err = shutdown(clientsockfd, 2);
+    err = shutdown(clientsockfd, 2);
     if (err == -1) {
         perror("Shutting down the client socket file descriptor failed");
     }
