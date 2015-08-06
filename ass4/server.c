@@ -42,11 +42,13 @@ void setup(portno) {
         perror("Couldn't open socket!");
         exit(EXIT_FAILURE);
     }
+    // FIXME: Is this necessary?
     //bzero((char*) &serv_addr, sizeof(serv_addr));
     // Set the address family
     serv_addr.sin_family = AF_INET;
     // Convert from host byte-order to network byte-order
     serv_addr.sin_port = htons(portno);
+    // FIXME: Answer this question
     // Apparently INADDR_ANY is localhost?
     serv_addr.sin_addr.s_addr = INADDR_ANY;
     err = bind(socketfd, (struct sockaddr *) &serv_addr, sizeof(serv_addr));
@@ -54,7 +56,6 @@ void setup(portno) {
         perror("Failed to bind to the socket");
         exit(EXIT_FAILURE);
     }
-    puts("bound");
 
     // Apparently the max backlog on most systems is 5
     err = listen(socketfd, 5);
@@ -62,18 +63,20 @@ void setup(portno) {
         perror("Failed to listen on the socket");
         exit(EXIT_FAILURE);
     }
+    serve_loop(socketfd);
 }
 
 void serve_loop(int socketfd) {
     int newsockfd, err;
-    socklen_t clilen;
+    socklen_t clilen = sizeof(cli_addr);
     char client_type = '\0';
     char *message_buffer, *key_buffer;
     size_t message_len;
     struct sockaddr_in cli_addr;
 
     while (true) {
-        clilen = sizeof(cli_addr);
+        // Accept new connections from the client and fork off workers.
+        // FIXME: rename newsockfd
         newsockfd = accept(socketfd, (struct sockaddr *) &cli_addr, &clilen);
         if (newsockfd < 0) {
             perror("Failed to accept connection");
