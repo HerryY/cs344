@@ -10,9 +10,11 @@
 #define IP_PROTOCOL 0
 
 #ifdef ENCRYPT
-    #define SERVERTYPE 1
+    #define SERVERTYPE 'e'
+    #define CRYPT(a, b) (a) = (int)((int)(a) + (int)(b));
 #elif DECRYPT
-    #define SERVERTYPE 0
+    #define SERVERTYPE 'd'
+    #define CRYPT(a, b) (a) = (int)((int)(a) - (int)(b));
 #endif
 
 // FIXME wait on children when closing.
@@ -31,6 +33,7 @@ int main (int argc, char *argv[]) {
         exit(EXIT_FAILURE);
     }
     portno = (int)strtol(argv[1], NULL, 10);
+    setup(portno);
 }
 
 void setup(int portno) {
@@ -71,7 +74,8 @@ void serve_loop(int socketfd) {
     int newsockfd, err;
     struct sockaddr_in cli_addr;
     socklen_t clilen = sizeof(cli_addr);
-    char client_type = '\0';
+    char client_type = 1;
+    char server_type = SERVERTYPE;
     char *message_buffer, *key_buffer;
     size_t message_len;
 
@@ -91,13 +95,26 @@ void serve_loop(int socketfd) {
                 cleanup(socketfd, newsockfd, NULL, NULL);
                 exit(EXIT_FAILURE);
             }
+
+            // Write a single character representing the server type.
+            err = write(newsockfd, &server_type, sizeof(char));
+            if (err < 0) {
+                perror("Failed to write program type to socket");
+                cleanup(socketfd, newsockfd, NULL, NULL);
+                exit(EXIT_FAILURE);
+            }
+
             // If the `client_type` is not the same as the server type,
             // that is if there is a decrypt client connecting to an encrypt
             // server or vice versa, then fail to connect.
-            if (client_type != SERVERTYPE) {
+            if (client_type != server_type) {
                 fprintf(stderr, "Rejecting connection from the wrong "
                         "type of client\n");
-                cleanup(socketfd, newsockfd, NULL, NULL);
+                shutdown(newsockfd, 2);
+                close(newsockfd);
+                shutdown(socketfd, 2);
+                close(socketfd);
+                //cleanup(socketfd, newsockfd, NULL, NULL);
                 exit(EXIT_FAILURE);
             }
 
@@ -134,8 +151,8 @@ void serve_loop(int socketfd) {
             // message buffer.
             do_otp(message_len, key_buffer, message_buffer);
             #if DEBUG
-                write(STDOUT_FILENO, message_buffer, message_len);
-                printf("\n");
+                //write(STDOUT_FILENO, message_buffer, message_len);
+                //printf("\n");
             #endif
             // Write the response back to the client.
             err = write(newsockfd, message_buffer, message_len);
@@ -152,9 +169,45 @@ void serve_loop(int socketfd) {
     }
 }
 
-void do_otp(size_t message_len, char *key_buffer, char*message_buffer) {
-    // FIXME: this is just a dummy for now
-    memcpy(key_buffer, message_buffer, message_len);
+void do_otp(size_t message_len, char *key_buffer, char *message_buffer) {
+
+    #ifdef DEBUG
+        write(STDERR_FILENO, message_buffer, message_len);
+        write(STDERR_FILENO, "\n", 1);
+    #endif
+    for (size_t i = 0; i < message_len; i++) {
+        if (message_buffer[i] == ' ') {
+            message_buffer[i] = '[';
+        }
+        if (key_buffer[i] == ' ') {
+            key_buffer[i] = '[';
+        }
+        message_buffer[i] = message_buffer[i] - 'A';
+        key_buffer[i] = key_buffer[i] - 'A';
+    }
+    for (size_t i = 0; i < message_len; i++) {
+        CRYPT(message_buffer[i], key_buffer[i])
+        if (message_buffer[i] < 0) {
+            message_buffer[i] = 27 + message_buffer[i];
+        } else {
+            message_buffer[i] %= 27;
+        }
+    }
+    for (size_t i = 0; i < message_len; i++) {
+        message_buffer[i] = message_buffer[i] + 'A';
+        key_buffer[i] = key_buffer[i] + 'A';
+        if (message_buffer[i] == '[') {
+            message_buffer[i] = ' ';
+        }
+        if (key_buffer[i] == '[') {
+            key_buffer[i] = ' ' ;
+        }
+    }
+
+    #ifdef DEBUG
+        write(STDERR_FILENO, message_buffer, message_len);
+        write(STDERR_FILENO, "\n", 1);
+    #endif
 }
 
 // Shut down the client socket connections and close all file descriptors.
@@ -172,10 +225,10 @@ void cleanup(int serversockfd, int clientsockfd, char *key_buffer,
     if (err == -1) {
         perror("Shutting down the client socket file descriptor failed");
     }
-    err = shutdown(serversockfd, 2);
+    /*err = shutdown(serversockfd, 2);
     if (err == -1) {
         perror("Shutting down the server socket file descriptor failed");
-    }
+    }*/
     close(clientsockfd);
-    close(serversockfd);
+    //close(serversockfd);
 }
