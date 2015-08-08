@@ -42,5 +42,6 @@ int main(int argc, char** argv) {
         }
         printf("%c", (char)num);
     }
+    printf("\n");
     return EXIT_SUCCESS;
 }
