@@ -1,5 +1,5 @@
 CC=clang
-CFLAGS=-Wall -Wall -Wextra -g -std=c99 -DDEBUG=1
+CFLAGS=-Wall -Wextra -Werror -g -std=c99 -DDEBUG=1
 
 all: keygen otp_enc_d otp_dec_d otp_enc otp_dec
 
