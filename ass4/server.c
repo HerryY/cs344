@@ -1,33 +1,35 @@
+#include <errno.h>
+#include <netinet/in.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
 #include <sys/types.h>
 #include <sys/socket.h>
-#include <netinet/in.h>
+#include <unistd.h>
 
 #define IP_PROTOCOL 0
 
 #ifdef ENCRYPT
-    #define SERVERTYPE 'e'
-    #define CRYPT(a, b) (a) = (int)((int)(a) + (int)(b));
+#define SERVERTYPE 'e'
+#define CRYPT(a, b) (a) = (int)((int)(a) + (int)(b));
 #elif DECRYPT
-    #define SERVERTYPE 'd'
-    #define CRYPT(a, b) (a) = (int)((int)(a) - (int)(b));
+#define SERVERTYPE 'd'
+#define CRYPT(a, b) (a) = (int)((int)(a) - (int)(b));
 #endif
-
-// FIXME wait on children when closing.
 
 void setup(int portno);
 void do_otp(size_t message_len, char *key_buffer, char*message_buffer);
 void serve_loop(int socketfd);
-void cleanup(int serversockfd, int clientsockfd, char *key_buffer,
-             char *message_buffer);
+void cleanup(int clientsockfd, char *key_buffer, char *message_buffer);
+void exit_server(int _);
+void child_ended(int _signum);
 
 
 int main (int argc, char *argv[]) {
     int portno;
+    signal(SIGINT, exit_server);
+    signal(SIGCHLD, child_ended);
     if (argc != 2) {
         fprintf(stderr, "No port provided!\n");
         exit(EXIT_FAILURE);
@@ -35,6 +37,39 @@ int main (int argc, char *argv[]) {
     portno = (int)strtol(argv[1], NULL, 10);
     setup(portno);
 }
+
+// We interrupt traps must have the signature int func(int), but we ignore the
+// signal number. Tell clang to suppress unused parameter warnings.
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wunused-parameter"
+// Wait for children when receiving SIGINT.
+void exit_server(int _) {
+    int _child_info;
+    pid_t pid;
+    while ((pid = waitpid(0, &_child_info, 0)) != -1) {}
+    if (errno == ECHILD) {
+        exit(EXIT_SUCCESS);
+    } else {
+        perror("Reaping children");
+        exit(EXIT_FAILURE);
+    }
+}
+#pragma clang diagnostic pop
+
+// We interrupt traps must have the signature int func(int), but we ignore the
+// signal number. Tell clang to suppress unused parameter warnings.
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wunused-parameter"
+// Reap children as they die and server receives SIGCHLD.
+void child_ended(int _signum) {
+    int _child_info;
+    pid_t pid = waitpid(0, &_child_info, 0);
+    if (pid == -1) {
+        perror("Reaping child after SIGCHLD.");
+        exit(EXIT_FAILURE);
+    }
+}
+#pragma clang diagnostic pop
 
 void setup(int portno) {
     int socketfd, err;
@@ -46,14 +81,11 @@ void setup(int portno) {
         perror("Couldn't open socket!");
         exit(EXIT_FAILURE);
     }
-    // FIXME: Is this necessary?
-    //bzero((char*) &serv_addr, sizeof(serv_addr));
     // Set the address family
     serv_addr.sin_family = AF_INET;
     // Convert from host byte-order to network byte-order
     serv_addr.sin_port = htons(portno);
-    // FIXME: Answer this question
-    // Apparently INADDR_ANY is localhost?
+    // INADDR_ANY is localhost?
     serv_addr.sin_addr.s_addr = INADDR_ANY;
     err = bind(socketfd, (struct sockaddr *) &serv_addr, sizeof(serv_addr));
     if (err < 0) {
@@ -81,7 +113,6 @@ void serve_loop(int socketfd) {
 
     while (true) {
         // Accept new connections from the client and fork off workers.
-        // FIXME: rename newsockfd
         newsockfd = accept(socketfd, (struct sockaddr *) &cli_addr, &clilen);
         if (newsockfd < 0) {
             perror("Failed to accept connection");
@@ -92,7 +123,7 @@ void serve_loop(int socketfd) {
             err = read(newsockfd, &client_type, sizeof(char));
             if (err < 0) {
                 perror("Failed to read from socket");
-                cleanup(socketfd, newsockfd, NULL, NULL);
+                cleanup(newsockfd, NULL, NULL);
                 exit(EXIT_FAILURE);
             }
 
@@ -100,7 +131,7 @@ void serve_loop(int socketfd) {
             err = write(newsockfd, &server_type, sizeof(char));
             if (err < 0) {
                 perror("Failed to write program type to socket");
-                cleanup(socketfd, newsockfd, NULL, NULL);
+                cleanup(newsockfd, NULL, NULL);
                 exit(EXIT_FAILURE);
             }
 
@@ -114,7 +145,6 @@ void serve_loop(int socketfd) {
                 close(newsockfd);
                 shutdown(socketfd, 2);
                 close(socketfd);
-                //cleanup(socketfd, newsockfd, NULL, NULL);
                 exit(EXIT_FAILURE);
             }
 
@@ -123,7 +153,7 @@ void serve_loop(int socketfd) {
             err = read(newsockfd, &message_len, sizeof(size_t));
             if (err < 0) {
                 perror("Failed to read from socket");
-                cleanup(socketfd, newsockfd, NULL, NULL);
+                cleanup(newsockfd, NULL, NULL);
                 exit(EXIT_FAILURE);
             }
 
@@ -136,7 +166,7 @@ void serve_loop(int socketfd) {
             err = read(newsockfd, message_buffer, message_len);
             if (err < 0) {
                 perror("Failed to read from socket");
-                cleanup(socketfd, newsockfd, key_buffer, message_buffer);
+                cleanup(newsockfd, key_buffer, message_buffer);
                 exit(EXIT_FAILURE);
             }
 
@@ -144,16 +174,16 @@ void serve_loop(int socketfd) {
             err = read(newsockfd, key_buffer, message_len);
             if (err < 0) {
                 perror("Failed to read from socket");
-                cleanup(socketfd, newsockfd, key_buffer, message_buffer);
+                cleanup(newsockfd, key_buffer, message_buffer);
                 exit(EXIT_FAILURE);
             }
             // Perform the actual encryption, writing the result back into the
             // message buffer.
             do_otp(message_len, key_buffer, message_buffer);
-            #if DEBUG
-                //write(STDOUT_FILENO, message_buffer, message_len);
-                //printf("\n");
-            #endif
+#if DEBUG
+            //write(STDOUT_FILENO, message_buffer, message_len);
+            //printf("\n");
+#endif
             // Write the response back to the client.
             err = write(newsockfd, message_buffer, message_len);
             if (err < 0) {
@@ -161,7 +191,7 @@ void serve_loop(int socketfd) {
             }
 
             // Clean up.
-            cleanup(socketfd, newsockfd, key_buffer, message_buffer);
+            cleanup(newsockfd, key_buffer, message_buffer);
             exit(EXIT_SUCCESS);
         } else {
             continue;
@@ -171,10 +201,13 @@ void serve_loop(int socketfd) {
 
 void do_otp(size_t message_len, char *key_buffer, char *message_buffer) {
 
-    #ifdef DEBUG
-        write(STDERR_FILENO, message_buffer, message_len);
-        write(STDERR_FILENO, "\n", 1);
-    #endif
+#ifdef DEBUG
+    write(STDERR_FILENO, message_buffer, message_len);
+    write(STDERR_FILENO, "\n", 1);
+#endif
+    // Replace spaces with '[', which is one more than 'Z'.
+    // Then subtract A so that characters which were 'A' are now 0 and
+    // characters which were '[' are now 26.
     for (size_t i = 0; i < message_len; i++) {
         if (message_buffer[i] == ' ') {
             message_buffer[i] = '[';
@@ -185,14 +218,17 @@ void do_otp(size_t message_len, char *key_buffer, char *message_buffer) {
         message_buffer[i] = message_buffer[i] - 'A';
         key_buffer[i] = key_buffer[i] - 'A';
     }
+    // Actual algorithm. Handle negative modularization.
     for (size_t i = 0; i < message_len; i++) {
         CRYPT(message_buffer[i], key_buffer[i])
-        if (message_buffer[i] < 0) {
-            message_buffer[i] = 27 + message_buffer[i];
-        } else {
-            message_buffer[i] %= 27;
-        }
+            if (message_buffer[i] < 0) {
+                message_buffer[i] = 27 + message_buffer[i];
+            } else {
+                message_buffer[i] %= 27;
+            }
     }
+    // Undo initial transformation so now we are back in the original alphabet
+    // of [A-Z_]
     for (size_t i = 0; i < message_len; i++) {
         message_buffer[i] = message_buffer[i] + 'A';
         key_buffer[i] = key_buffer[i] + 'A';
@@ -204,16 +240,15 @@ void do_otp(size_t message_len, char *key_buffer, char *message_buffer) {
         }
     }
 
-    #ifdef DEBUG
-        write(STDERR_FILENO, message_buffer, message_len);
-        write(STDERR_FILENO, "\n", 1);
-    #endif
+#ifdef DEBUG
+    write(STDERR_FILENO, message_buffer, message_len);
+    write(STDERR_FILENO, "\n", 1);
+#endif
 }
 
 // Shut down the client socket connections and close all file descriptors.
 // Also free any buffers which are not NULL.
-void cleanup(int serversockfd, int clientsockfd, char *key_buffer,
-             char *message_buffer) {
+void cleanup(int clientsockfd, char *key_buffer, char *message_buffer) {
     int err;
     if (message_buffer != NULL) {
         free(message_buffer);
@@ -225,10 +260,5 @@ void cleanup(int serversockfd, int clientsockfd, char *key_buffer,
     if (err == -1) {
         perror("Shutting down the client socket file descriptor failed");
     }
-    /*err = shutdown(serversockfd, 2);
-    if (err == -1) {
-        perror("Shutting down the server socket file descriptor failed");
-    }*/
     close(clientsockfd);
-    //close(serversockfd);
 }
