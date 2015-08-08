@@ -1,9 +1,9 @@
 CC=clang
 CFLAGS=-Wall -Wall -Wextra -g -std=c99 -DDEBUG=1
 
-all: keygen.c otp_enc_d otp_dec_d otp_enc otp_dec
+all: keygen otp_enc_d otp_dec_d otp_enc otp_dec
 
-keygen.c:
+keygen:
 	${CC} keygen.c -o keygen ${CFLAGS}
 
 otp_enc_d:
@@ -13,7 +13,7 @@ otp_dec_d:
 	${CC} server.c -o otp_dec_d -DDECRYPT=1 ${CFLAGS}
 
 otp_enc:
-	${CC} client.c -o otp_dec -DDECRYPT=1 ${CFLAGS}
+	${CC} client.c -o otp_enc -DENCRYPT=1 ${CFLAGS}
 
 otp_dec:
 	${CC} client.c -o otp_dec -DDECRYPT=1 ${CFLAGS}
