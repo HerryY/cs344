@@ -145,8 +145,8 @@ void serve_loop(int socketfd) {
                         "type of client\n");
                 shutdown(newsockfd, 2);
                 close(newsockfd);
-                shutdown(socketfd, 2);
-                close(socketfd);
+                //shutdown(socketfd, 2);
+                //close(socketfd);
                 exit(EXIT_FAILURE);
             }
 
