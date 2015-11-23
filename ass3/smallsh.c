@@ -165,7 +165,7 @@ void parse_and_run(char *line, unsigned int length) {
         unsigned int args_index = 1;
 
         char *command = strtok(line, sep);
-        if (command == NULL) return;
+        if (command == NULL) goto cleanup;
         args[0] = command;
 
         // Built in exit command. Cleanup and exit 0.
@@ -186,9 +186,9 @@ void parse_and_run(char *line, unsigned int length) {
                 // cd to destination.
                 if(chdir(dest) == -1) {
                         perror("chdir");
-                        return;
+                        goto cleanup;
                 }
-                return;
+                goto cleanup;
         } else if (strcmp(command, "status") == 0) {
                 // Built in status command. Print status information.
                 // Print status information.
@@ -202,7 +202,7 @@ void parse_and_run(char *line, unsigned int length) {
                 if (WTERMSIG(shell_status))
                         printf("Termination signal: %d\n",
                                         WTERMSIG(shell_status));
-                return;
+                goto cleanup;
         }
 
 
@@ -224,7 +224,7 @@ void parse_and_run(char *line, unsigned int length) {
                         if (word == NULL) {
                                 printf("Invalid syntax. "
                                        "No input file provided\n");
-                                return;
+                                goto cleanup;
                         }
                         input = create_file_token(&word, length);
                         continue;
@@ -235,7 +235,7 @@ void parse_and_run(char *line, unsigned int length) {
                         if (word == NULL) {
                                 printf("Invalid syntax. "
                                        "No output file provided\n");
-                                return;
+                                goto cleanup;
                         }
                         output = create_file_token(&word, length);
                         continue;
@@ -289,7 +289,7 @@ void parse_and_run(char *line, unsigned int length) {
                 if (output != NULL) {
                         // Open the output file, creating it if it doesn't
                         // exist.
-                        outfile = open(output, O_WRONLY | O_CREAT);
+                        outfile = open(output, O_WRONLY | O_CREAT, 0744);
                         // If opening the output file fails, print reason.
                         if (outfile == -1) {
                                 perror("outfile");
@@ -334,14 +334,15 @@ void parse_and_run(char *line, unsigned int length) {
                         push_child_list(pid);
                 }
         }
-        // If the input has been set and it's not the statically allocated
+    cleanup:
+        // If the input is not the statically allocated
         // /dev/null, free it
-        if (input != devnull && input != NULL) {
+        if (input != devnull) {
                 free(input);
         }
-        // If the output has been set and it's not the statically allocated
+        // If the output is not the statically allocated
         // /dev/null, free it
-        if (output != devnull && output != NULL) {
+        if (output != devnull) {
                 free(output);
         }
         // free the list of arguments.
@@ -379,7 +380,7 @@ bool word_has_comment(char *word) {
  */
 char* create_file_token(char **word, unsigned int max_length) {
         size_t token_length = strnlen(*word, max_length);
-        char *token = malloc(token_length * sizeof(char*));
+        char *token = malloc(token_length * sizeof(char));
         strncpy(token, *word, token_length);
         return token;
 }
