@@ -1,3 +1,5 @@
+// Copyright 2015 Ian Kronquist
+// All rights reserved
 #include <arpa/inet.h>
 #include <fcntl.h>
 #include <stdio.h>

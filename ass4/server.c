@@ -1,3 +1,5 @@
+// Copyright 2015 Ian Kronquist
+// All rights reserved
 #include <errno.h>
 #include <netinet/in.h>
 #include <signal.h>

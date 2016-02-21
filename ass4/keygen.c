@@ -1,3 +1,5 @@
+// Copyright 2015 Ian Kronquist
+// All rights reserved
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>

@@ -1,3 +1,5 @@
+// Copyright 2015 Ian Kronquist
+// All rights reserved
 #define _GNU_SOURCE
 #include <assert.h>
 #include <errno.h>
@@ -57,8 +59,7 @@ void push_child_list(pid_t child) {
         if (bg_child_list.num == bg_child_list.cap) {
                 bg_child_list.cap *= 2;
                 bg_child_list.children = realloc(bg_child_list.children,
-                                bg_child_list.cap *
-                                sizeof(pid_t));
+                                bg_child_list.cap * sizeof(pid_t));
         }
         bg_child_list.children[bg_child_list.num] = child;
         bg_child_list.num++;
